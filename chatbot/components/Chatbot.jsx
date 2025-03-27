@@ -81,45 +81,33 @@ const Chatbot = () => {
     try {
       const data = JSON.parse(response);
       
-      // Handle different types of responses
-      if (data.type === "orders") {
-        // Handle orders list response
-        setPastOrders(data.orders);
-        setShowOrderSelection(true);
-        setMessages(prev => [...prev, { 
-          text: "Here are your past orders. Please select the order you want to return:", 
-          isUser: false,
-          isOrderSelection: true 
-        }]);
-      } else if (data.type === "return_initiated") {
-        // Handle return initiation response
-        setMessages(prev => [...prev, { 
-          text: `Return initiated for order ${data.orderId}. You will receive a return label shortly.`, 
-          isUser: false 
-        }]);
-        setShowOrderSelection(false);
-      } else if (data.type === "error") {
-        // Handle error response
-        setMessages(prev => [...prev, { 
-          text: data.message || "Sorry, something went wrong. Please try again.", 
-          isUser: false 
-        }]);
+      // If response contains orders
+      if (data.orders) {
+        setMessages(prev => [
+          ...prev,
+          { 
+            text: "Here are your past orders. Please select one:", 
+            isUser: false, 
+            isOrderMessage: true, // Use isOrderMessage instead of isOrderSelection
+            orders: data.orders // Attach orders data
+          }
+        ]);
       } else {
         // Handle regular text response
-        setMessages(prev => [...prev, { 
-          text: data.message || response, 
-          isUser: false 
+        setMessages(prev => [...prev, {
+          text: typeof data === 'string' ? data : data.message || response,
+          isUser: false
         }]);
       }
     } catch (error) {
-      // If response is not JSON, treat it as regular text
-      setMessages(prev => [...prev, { 
-        text: response, 
-        isUser: false 
+      // If not JSON, treat as regular text
+      setMessages(prev => [...prev, {
+        text: response,
+        isUser: false
       }]);
     }
   };
-
+  
   const fetchBotMessage = (userMessage) => {
     setIsTyping(true);
     const userId = localStorage.getItem('userId');
@@ -164,6 +152,46 @@ const Chatbot = () => {
       setMessages(prev => [...prev, { 
         text: "Sorry, I couldn't process your order selection. Please try again.", 
         isUser: false 
+      }]);
+    }
+  };
+
+  const handleOrderReturn = async (orderId) => {
+    const userId = localStorage.getItem('userId');
+    
+    try {
+      // First, show the user's selection in the chat
+      setMessages(prev => [...prev, {
+        text: `${orderId}`,
+        isUser: true
+      }]);
+
+      // Send the return request to the backend
+      const response = await fetch('https://smart-nhv2.onrender.com/api/nlp/getorder', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text: `order id is ${orderId}`,
+          orderId: orderId,
+          userId: userId
+        }),
+      });
+
+      const data = await response.text();
+      
+      // Show the bot's response
+      setMessages(prev => [...prev, {
+        text: data,
+        isUser: false
+      }]);
+
+    } catch (error) {
+      console.error('Error initiating return:', error);
+      setMessages(prev => [...prev, {
+        text: "Sorry, I couldn't process your return request. Please try again.",
+        isUser: false
       }]);
     }
   };
@@ -297,24 +325,31 @@ const Chatbot = () => {
                 }}
               >
                 <MessageBubble text={msg.text} isUser={msg.isUser} isDarkMode={isDarkMode} />
-                {msg.isOrderSelection && showOrderSelection && (
+                {msg.isOrderMessage && msg.orders && (
                   <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "10px" }}>
-                    {pastOrders.map((order) => (
-                      <button
+                    {msg.orders.map((order) => (
+                      <motion.button
                         key={order.orderId}
-                        onClick={() => handleOrderSelection(order.orderId)}
+                        onClick={() => handleOrderReturn(order.orderId)}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
                         style={{
-                          padding: "10px",
-                          borderRadius: "5px",
-                          backgroundColor: isDarkMode ? "#333" : "#ddd",
+                          padding: "12px 20px",
+                          borderRadius: "8px",
+                          backgroundColor: isDarkMode ? "#333" : "#fff",
                           color: isDarkMode ? "#fff" : "#333",
-                          border: "none",
+                          border: `1px solid ${isDarkMode ? "#444" : "#ddd"}`,
                           cursor: "pointer",
-                          transition: "background-color 0.3s",
+                          transition: "all 0.3s ease",
+                          textAlign: "center",
+                          boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                          fontSize: "16px",
+                          fontWeight: "500"
                         }}
                       >
-                        Order #{order.orderId} - {order.date} - ${order.total}
-                      </button>
+                        Order #{order.orderId}
+                        Item {order.itmes}
+                      </motion.button>
                     ))}
                   </div>
                 )}
@@ -376,6 +411,49 @@ const Chatbot = () => {
                   onClick={() => setInput(msg)}
                 >
                   {msg}
+                </motion.div>
+              ))}
+              {messages.map((msg, index) => (
+                <motion.div
+                  key={index}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  style={{
+                    alignSelf: msg.isUser ? "flex-end" : "flex-start",
+                    maxWidth: "80%",
+                    wordWrap: "break-word",
+                    overflowWrap: "break-word",
+                  }}
+                >
+                  <MessageBubble text={msg.text} isUser={msg.isUser} isDarkMode={isDarkMode} />
+                  {msg.isOrderMessage && msg.orders && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "10px" }}>
+                      {msg.orders.map((order) => (
+                        <motion.button
+                          key={order.orderId}
+                          onClick={() => handleOrderReturn(order.orderId)}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          style={{
+                            padding: "12px 20px",
+                            borderRadius: "8px",
+                            backgroundColor: isDarkMode ? "#333" : "#fff",
+                            color: isDarkMode ? "#fff" : "#333",
+                            border: `1px solid ${isDarkMode ? "#444" : "#ddd"}`,
+                            cursor: "pointer",
+                            transition: "all 0.3s ease",
+                            textAlign: "center",
+                            boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                            fontSize: "16px",
+                            fontWeight: "500"
+                          }}
+                        >
+                          Order {order.orderId}
+                        </motion.button>
+                      ))}
+                    </div>
+                  )}
                 </motion.div>
               ))}
 
