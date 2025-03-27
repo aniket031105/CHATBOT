@@ -9,7 +9,7 @@ import { useNavigate } from "react-router-dom";
 const predefinedMessages = [
   "What is my refund status?",
   "Can I return my order?",
-  "How do I generate a return label?"
+  "What are the return policy"
 ];
 
 const Chatbot = () => {
@@ -25,6 +25,12 @@ const Chatbot = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [orders, setOrders] = useState(orderData);
   const navigate = useNavigate();
+
+  const [isListening, setIsListening] = useState(false); // Tracks if speech recognition is active
+  const [muteVoice, setMuteVoice] = useState(false);     // Tracks if voice output is muted
+  const [recognitionSupported, setRecognitionSupported] = useState(false); // Browser support for speech recognition
+  const [synthesisSupported, setSynthesisSupported] = useState(false);     // Browser support for text-to-speech
+  const recognition = useRef(null); // Reference to store the SpeechRecognition object
 
   // Get user data from localStorage
   const userData = {
@@ -213,6 +219,62 @@ const Chatbot = () => {
     }
   }, [messages]);
 
+  useEffect(() => {
+    // Check for SpeechRecognition support (vendor-prefixed in some browsers)
+    if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
+      setRecognitionSupported(true);
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      recognition.current = new SpeechRecognition();
+      recognition.current.lang = 'en-US';          // Set language to English
+      recognition.current.interimResults = false;  // Only return final results
+      recognition.current.maxAlternatives = 1;     // Return one transcription
+  
+      // Handle speech recognition results
+      recognition.current.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        setInput(transcript); // Set transcribed text in input field
+        setIsListening(false); // Stop listening after transcription
+      };
+  
+      // Stop recognition when user stops speaking
+      recognition.current.onspeechend = () => {
+        recognition.current.stop();
+        setIsListening(false);
+      };
+  
+      // Handle errors
+      recognition.current.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+        setIsListening(false);
+      };
+    } else {
+      console.warn('Speech recognition not supported in this browser');
+    }
+  
+    // Check for SpeechSynthesis support
+    if ('speechSynthesis' in window) {
+      setSynthesisSupported(true);
+    }
+  }, []);
+
+
+  useEffect(() => {
+    if (messages.length > 0 && synthesisSupported && !muteVoice) {
+      const lastMessage = messages[messages.length - 1];
+      if (!lastMessage.isUser) { // Only speak chatbot messages
+        speak(lastMessage.text);
+      }
+    }
+  }, [messages]);
+  
+  const speak = (text) => {
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'en-US';
+    window.speechSynthesis.speak(utterance);
+  };
+
+
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -250,6 +312,28 @@ const Chatbot = () => {
             }}>
               Chatbot Shanks
             </h2>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
+            <button
+              onClick={() => setMuteVoice(!muteVoice)}
+              style={{ 
+                color: isDarkMode ? "#fff" : "#333",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                padding: "5px 10px"
+              }}
+            >
+              {muteVoice ? "Unmute" : "Mute"}
+            </button>
+            <motion.div
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.95 }}
+              style={{ cursor: "pointer" }}
+              onClick={() => setShowProfile(!showProfile)}
+            >
+            </motion.div>
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
@@ -511,6 +595,25 @@ const Chatbot = () => {
           zIndex: 10,
           width:"60%",
         }}>
+            {recognitionSupported && (
+            <button
+              onClick={() => {
+                if (!isListening) {
+                  recognition.current.start();
+                  setIsListening(true);
+                }
+              }}
+              disabled={isListening}
+              style={{
+                padding: "10px",
+                backgroundColor: isListening ? "#ccc" : "#e0e0e0",
+                borderRadius: "50%",
+              }}
+            >
+              🎤
+            </button>
+          )}
+
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
