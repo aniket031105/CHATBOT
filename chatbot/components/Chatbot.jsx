@@ -4,6 +4,7 @@ import UserProfile from "./UserProfile";
 import Sidebar from "./sidebar";
 import { motion, AnimatePresence } from "framer-motion";
 import orderData from "../data/ordersData";
+import { useNavigate } from "react-router-dom";
 
 const predefinedMessages = [
   "What is my refund status?",
@@ -18,9 +19,27 @@ const Chatbot = () => {
   const [isTyping, setIsTyping] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [showPredefined, setShowPredefined] = useState(true);
+  const [pastOrders, setPastOrders] = useState([]);
+  const [showOrderSelection, setShowOrderSelection] = useState(false);
   const chatContainerRef = useRef(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [orders, setOrders] = useState(orderData);
+  const navigate = useNavigate();
+
+  // Get user data from localStorage
+  const userData = {
+    name: localStorage.getItem("userName") || "User",
+    email: localStorage.getItem("userEmail") || "user@example.com"
+  };
+
+  // Handle logout
+  const handleLogout = () => {
+    localStorage.removeItem("userId");
+    localStorage.removeItem("userName");
+    localStorage.removeItem("userEmail");
+    localStorage.removeItem("isAuthenticated");
+    navigate("/login");
+  };
 
   // Full-screen chatbot style
   const chatbotStyle = {
@@ -58,25 +77,95 @@ const Chatbot = () => {
     localStorage.setItem("darkMode", isDarkMode);
   }, [isDarkMode]);
 
+  const handleBotResponse = (response) => {
+    try {
+      const data = JSON.parse(response);
+      
+      // Handle different types of responses
+      if (data.type === "orders") {
+        // Handle orders list response
+        setPastOrders(data.orders);
+        setShowOrderSelection(true);
+        setMessages(prev => [...prev, { 
+          text: "Here are your past orders. Please select the order you want to return:", 
+          isUser: false,
+          isOrderSelection: true 
+        }]);
+      } else if (data.type === "return_initiated") {
+        // Handle return initiation response
+        setMessages(prev => [...prev, { 
+          text: `Return initiated for order ${data.orderId}. You will receive a return label shortly.`, 
+          isUser: false 
+        }]);
+        setShowOrderSelection(false);
+      } else if (data.type === "error") {
+        // Handle error response
+        setMessages(prev => [...prev, { 
+          text: data.message || "Sorry, something went wrong. Please try again.", 
+          isUser: false 
+        }]);
+      } else {
+        // Handle regular text response
+        setMessages(prev => [...prev, { 
+          text: data.message || response, 
+          isUser: false 
+        }]);
+      }
+    } catch (error) {
+      // If response is not JSON, treat it as regular text
+      setMessages(prev => [...prev, { 
+        text: response, 
+        isUser: false 
+      }]);
+    }
+  };
+
   const fetchBotMessage = (userMessage) => {
+    setIsTyping(true);
+    const userId = localStorage.getItem('userId');
+    
     fetch('https://smart-nhv2.onrender.com/api/nlp/getorder', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ text: userMessage, userId: "567" }),
+      body: JSON.stringify({ 
+        text: userMessage, 
+        userId: userId
+      }),
     })
       .then(response => response.text())
       .then(botMessage => {
-        const botReply = botMessage;
-        console.log(botReply)
-        setMessages((prev) => [...prev, { text: botReply, isUser: false }]);
+        handleBotResponse(botMessage);
         setIsTyping(false);
       })
       .catch(error => {
         console.error('Error fetching bot message:', error);
+        setMessages(prev => [...prev, { 
+          text: "Sorry, I couldn't process your request. Please try again.", 
+          isUser: false 
+        }]);
         setIsTyping(false);
       });
+  };
+
+  const handleOrderSelection = async (orderId) => {
+    try {
+      const userId = localStorage.getItem('userId');
+      
+      if (!userId) {
+        throw new Error('User ID not found');
+      }
+
+      // Send the order selection to the bot API
+      fetchBotMessage(`Return order ${orderId}`);
+    } catch (error) {
+      console.error('Error handling order selection:', error);
+      setMessages(prev => [...prev, { 
+        text: "Sorry, I couldn't process your order selection. Please try again.", 
+        isUser: false 
+      }]);
+    }
   };
 
   const handleSend = (message) => {
@@ -135,24 +224,44 @@ const Chatbot = () => {
             </h2>
           </div>
 
-          <motion.div
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.95 }}
-            style={{ cursor: "pointer", marginRight: "30px" }}
-            onClick={() => setShowProfile(!showProfile)}
-          >
-            <img
-              src={`https://api.dicebear.com/7.x/initials/svg?seed=John`}
-              alt="User"
+          <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={handleLogout}
               style={{
-                width: "40px",
-                height: "40px",
-                borderRadius: "50%",
-                border: `4px solid ${isDarkMode ? "#ff4d4d" : "#007bff"}`,
-                transition: "all 0.3s ease",
+                padding: "8px 16px",
+                borderRadius: "20px",
+                border: "none",
+                background: isDarkMode ? "#ff4d4d" : "#ff4444",
+                color: "white",
+                cursor: "pointer",
+                fontSize: "14px",
+                fontWeight: "500",
               }}
-            />
-          </motion.div>
+            >
+              Logout
+            </motion.button>
+
+            <motion.div
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.95 }}
+              style={{ cursor: "pointer" }}
+              onClick={() => setShowProfile(!showProfile)}
+            >
+              <img
+                src={`https://api.dicebear.com/7.x/initials/svg?seed=${userData.name}`}
+                alt="User"
+                style={{
+                  width: "40px",
+                  height: "40px",
+                  borderRadius: "50%",
+                  border: `4px solid ${isDarkMode ? "#ff4d4d" : "#007bff"}`,
+                  transition: "all 0.3s ease",
+                }}
+              />
+            </motion.div>
+          </div>
         </div>
 
         {/* Chat Messages - Adjusted to fit above input box */}
@@ -173,7 +282,6 @@ const Chatbot = () => {
             backgroundColor: isDarkMode ? "#121212" : "#CDEDF6",
           }}
         >
-
           <AnimatePresence>
             {messages.map((msg, index) => (
               <motion.div
@@ -189,9 +297,9 @@ const Chatbot = () => {
                 }}
               >
                 <MessageBubble text={msg.text} isUser={msg.isUser} isDarkMode={isDarkMode} />
-                {msg.isOrderSelection && (
+                {msg.isOrderSelection && showOrderSelection && (
                   <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "10px" }}>
-                    {orders.map((order) => (
+                    {pastOrders.map((order) => (
                       <button
                         key={order.orderId}
                         onClick={() => handleOrderSelection(order.orderId)}
@@ -205,7 +313,7 @@ const Chatbot = () => {
                           transition: "background-color 0.3s",
                         }}
                       >
-                        {order.description}
+                        Order #{order.orderId} - {order.date} - ${order.total}
                       </button>
                     ))}
                   </div>
@@ -308,7 +416,7 @@ const Chatbot = () => {
         <AnimatePresence>
           {showProfile && (
             <UserProfile
-              user={{ name: "John Doe", email: "john@example.com" }}
+              user={userData}
               closeProfile={() => setShowProfile(false)}
               isDarkMode={isDarkMode}
             />

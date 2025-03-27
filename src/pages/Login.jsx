@@ -1,12 +1,14 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const navigate = useNavigate();
 
   const handleLogin = async (e) => {
-    e.preventDefault(); // Prevent form submission
+    e.preventDefault();
 
     try {
       const response = await fetch("https://smart-nhv2.onrender.com/api/auth/login", {
@@ -19,22 +21,20 @@ const Login = () => {
 
       if (!response.ok) {
         const errorData = await response.json();
-        setError(errorData.error); // Display error message
+        setError(errorData.error);
         return;
       }
 
       const data = await response.json();
 
-      // Store user ID and name in localStorage
+      // Store user data in localStorage
       localStorage.setItem("userId", data.user.id);
       localStorage.setItem("userName", data.user.name);
+      localStorage.setItem("userEmail", data.user.email);
+      localStorage.setItem("isAuthenticated", "true");
 
-      alert("Login successful!");
-      console.log("User ID:", data.user.id);
-      console.log("User Name:", data.user.name);
-
-      // Redirect to another page (e.g., dashboard)
-      window.location.href = "/dashboard";
+      // Redirect to chatbot
+      navigate("/chatbot");
     } catch (error) {
       console.error("Error logging in:", error);
       setError("An error occurred. Please try again.");
